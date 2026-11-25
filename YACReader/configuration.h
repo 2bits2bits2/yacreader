@@ -111,6 +111,8 @@ public:
     void setLastVersionCheck(const QDate &date) { settings->setValue(LAST_VERSION_CHECK, date); }
     int getNumDaysBetweenVersionChecks() { return settings->value(NUM_DAYS_BETWEEN_VERSION_CHECKS, 1).toInt(); }
     void setNumDaysBetweenVersionChecks(int days) { return settings->setValue(NUM_DAYS_BETWEEN_VERSION_CHECKS, days); }
+    bool getCheckForNewVersion() { return settings->value(CHECK_FOR_NEW_VERSION, true).toBool(); }
+    void setCheckForNewVersion(bool b) { settings->setValue(CHECK_FOR_NEW_VERSION, b); }
     bool getQuickNaviMode() { return settings->value(QUICK_NAVI_MODE).toBool(); }
     bool getDisableShowOnMouseOver() { return settings->value(DISABLE_MOUSE_OVER_GOTO_FLOW).toBool(); }
     bool getUseSoftwareGoToFlow() { return settings->value(USE_SOFTWARE_GO_TO_FLOW, false).toBool(); }

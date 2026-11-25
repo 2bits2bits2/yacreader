@@ -32,6 +32,7 @@ private:
     QComboBox *languageCombo;
 
     QCheckBox *showTimeInInformationLabel;
+    QCheckBox *checkForNewVersion;
 
     QCheckBox *circularMagnifyingGlass;
     QCheckBox *magnifyingGlassRing;

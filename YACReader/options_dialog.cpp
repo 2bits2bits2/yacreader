@@ -55,6 +55,13 @@ OptionsDialog::OptionsDialog(QWidget *parent)
     languageLayout->addWidget(languageCombo);
     languageBox->setLayout(languageLayout);
 
+    QGroupBox *updatesBox = new QGroupBox(tr("Updates"));
+    auto *updatesLayout = new QVBoxLayout();
+    checkForNewVersion = new QCheckBox(tr("Check for updates automatically"));
+    checkForNewVersion->setToolTip(tr("Contact yacreader.com on startup to check whether a new version is available."));
+    updatesLayout->addWidget(checkForNewVersion);
+    updatesBox->setLayout(updatesLayout);
+
     QGroupBox *displayBox = new QGroupBox(tr("Display"));
     auto displayLayout = new QHBoxLayout();
     showTimeInInformationLabel = new QCheckBox(tr("Show time in current page information label"));
@@ -159,6 +166,7 @@ OptionsDialog::OptionsDialog(QWidget *parent)
 
     layoutGeneral->addWidget(pathBox);
     layoutGeneral->addWidget(languageBox);
+    layoutGeneral->addWidget(updatesBox);
     layoutGeneral->addWidget(displayBox);
     layoutGeneral->addWidget(magnifyingGlassBox);
     // layoutGeneral->addWidget(fitBox);
@@ -365,6 +373,8 @@ void OptionsDialog::saveOptions()
 
     Configuration::getConfiguration().setShowTimeInInformation(showTimeInInformationLabel->isChecked());
 
+    Configuration::getConfiguration().setCheckForNewVersion(checkForNewVersion->isChecked());
+
     Configuration::getConfiguration().setMagnifyingGlassCircular(circularMagnifyingGlass->isChecked());
     Configuration::getConfiguration().setMagnifyingGlassRing(magnifyingGlassRing->isChecked());
     Configuration::getConfiguration().setMagnifyingGlassEdgeEase(magnifyingGlassEdgeEase->isChecked());
@@ -425,6 +435,8 @@ void OptionsDialog::restoreOptions(QSettings *settings)
     languageCombo->setCurrentIndex(languageIndex);
 
     showTimeInInformationLabel->setChecked(Configuration::getConfiguration().getShowTimeInInformation());
+
+    checkForNewVersion->setChecked(Configuration::getConfiguration().getCheckForNewVersion());
 
     circularMagnifyingGlass->setChecked(Configuration::getConfiguration().getMagnifyingGlassCircular());
     magnifyingGlassRing->setChecked(Configuration::getConfiguration().getMagnifyingGlassRing());
