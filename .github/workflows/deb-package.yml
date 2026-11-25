@@ -1,0 +1,150 @@
+name: Deb Package
+
+# Builds the self-contained yacreader_*.deb for Ubuntu 24.04-based systems
+# (see build_scripts/ubuntu_24.04/build_deb.sh and PLAN.md):
+#   1. build + unit tests (51 Qt tests, offscreen)
+#   2. full e2e test: install the deb in a pristine ubuntu:24.04 container,
+#      headless runs, GUI startup on a sample comic, uninstall (32 checks)
+#   3. on a version tag push: draft GitHub release with the deb attached
+#      and notes generated from the commits since the previous tag
+
+on:
+  push:
+    branches:
+      - "**"
+    tags:
+      - "*.*.*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deb-package-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build deb + unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v6
+
+      # install-qt-action uses aqtinstall internally, so Qt lands in
+      # <dir>/<version>/<arch> - exactly the layout build_deb.sh expects,
+      # which then skips its own download entirely
+      - name: Install Qt 6.9.3
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.9.3"
+          arch: linux_gcc_64
+          dir: ${{ github.workspace }}/build_scripts/ubuntu_24.04/yacreader_build/qt
+          modules: "qt5compat qtmultimedia qtimageformats qtshadertools qtspeech"
+          cache: true
+
+      - name: Build deb
+        run: ./build_scripts/ubuntu_24.04/build_deb.sh
+
+      - name: Upload deb artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: yacreader-deb
+          path: build_scripts/ubuntu_24.04/dist/*.deb
+          if-no-files-found: error
+
+  e2e:
+    name: E2E deb test
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download deb artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: yacreader-deb
+          path: build_scripts/ubuntu_24.04/dist
+
+      - name: Run e2e test (pristine ubuntu:24.04 container)
+        run: ./build_scripts/ubuntu_24.04/e2e_deb_test_docker.sh
+
+  release:
+    name: Draft release with deb
+    needs: e2e
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download deb artifact
+        uses: actions/download-artifact@v6
+        with:
+          name: yacreader-deb
+          path: build_scripts/ubuntu_24.04/dist
+
+      - name: Verify tag matches VERSION
+        run: |
+          VERSION="$(tr -d '[:space:]' < VERSION)"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "::error::Tag $TAG does not match VERSION ($VERSION); the deb would be misversioned"
+            exit 1
+          fi
+
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+
+          # previous tag in version order, restricted to the same tag pattern
+          PREV=$(git -c versionsort.suffix=- tag --list '*.*.*' --sort=-v:refname \
+                 | grep -A1 -Fx "$TAG" | sed -n 2p || true)
+
+          if [ -n "$PREV" ]; then
+            RANGE="$PREV..$TAG"
+            HEADER="Changes since $PREV"
+          else
+            RANGE="$TAG"
+            HEADER="Initial release"
+          fi
+
+          {
+            echo "## $HEADER"
+            echo
+            if git log "$RANGE" --no-merges --pretty=format:'- %s (%h)' | grep -q .; then
+              git log "$RANGE" --no-merges --pretty=format:'- %s (%h)'
+            else
+              echo "No changes"
+            fi
+            echo
+            if [ -n "$PREV" ]; then
+              echo
+              echo "**Full diff:** https://github.com/${GITHUB_REPOSITORY}/compare/${PREV}...${TAG}"
+            fi
+          } > release-notes.md
+
+          cat release-notes.md
+
+      - name: Create or update draft release
+        run: |
+          set -euo pipefail
+          FLAGS=(--title "$TAG" --notes-file release-notes.md --draft)
+          DEB=$(ls build_scripts/ubuntu_24.04/dist/yacreader_"$TAG"_amd64.deb)
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" "${FLAGS[@]}"
+            gh release upload "$TAG" "$DEB" --clobber
+          else
+            gh release create "$TAG" "$DEB" "${FLAGS[@]}" --verify-tag
+          fi

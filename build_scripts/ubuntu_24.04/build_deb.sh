@@ -32,6 +32,7 @@ QT_VERSION="6.9.3"
 
 YACREADER_VERSION="$(tr -d '[:space:]' < "$REPO_DIR/VERSION")"
 DEB_VERSION="${YACREADER_VERSION}"
+BUILD_NUMBER="${BUILD_NUMBER:-0}"
 DEB_FILE="$DIST_DIR/yacreader_${DEB_VERSION}_amd64.deb"
 
 log() { echo "== $*"; }
@@ -98,7 +99,7 @@ cmake -B "$BUILD_DIR/build" -G "Unix Makefiles" \
     -DPDF_BACKEND=poppler \
     -DBUILD_TESTS=ON \
     -DBUILD_SERVER_STANDALONE=OFF \
-    -DBUILD_NUMBER=0
+    -DBUILD_NUMBER="${BUILD_NUMBER}"
 
 log "Building (this takes a while)..."
 cmake --build "$BUILD_DIR/build" --parallel "$(nproc)"
