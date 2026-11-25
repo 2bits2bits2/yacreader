@@ -20,13 +20,27 @@ set -u
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DIST_DIR="$SCRIPT_DIR/dist"
-VERSION="$(tr -d '[:space:]' < "$REPO_DIR/VERSION")"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "This test installs/removes packages and must run as root."
     echo "Either:  sudo $0"
     echo "or run the docker variant:  $SCRIPT_DIR/e2e_deb_test_docker.sh"
     exit 1
+fi
+
+# locate the deb first; inside the container the repo (and VERSION) are not mounted
+if [ -n "${1:-}" ]; then
+    [ -f "$1" ] || { echo "ERROR: given .deb does not exist: $1"; exit 1; }
+    DEB="$1"
+else
+    DEB="$(ls -t "$DIST_DIR"/yacreader_*.deb 2>/dev/null | head -n 1 || true)"
+    [ -n "$DEB" ] && [ -f "$DEB" ] || { echo "ERROR: no .deb found in $DIST_DIR"; exit 1; }
+fi
+
+if [ -r "$REPO_DIR/VERSION" ]; then
+    VERSION="$(tr -d '[:space:]' < "$REPO_DIR/VERSION")"
+else
+    VERSION="$(dpkg-deb -f "$DEB" Version | sed 's/-.*//')"
 fi
 
 PASS=0
@@ -61,16 +75,6 @@ echo "=== E2E test for yacreader .deb (version $VERSION) ==="
 # 1. Package sanity
 # ---------------------------------------------------------------------------
 echo "[1/6] Package sanity"
-DEB=""
-if [ -n "${1:-}" ]; then
-    if [ -f "$1" ]; then
-        DEB="$1"
-    else
-        fail "given .deb does not exist: $1"
-    fi
-else
-    DEB="$(ls "$DIST_DIR"/yacreader_"${VERSION}"*_amd64.deb 2>/dev/null | head -n 1)"
-fi
 
 if [ -z "${DEB:-}" ]; then
     fail "no .deb found in $DIST_DIR (yacreader_${VERSION}*_amd64.deb)"
@@ -82,7 +86,7 @@ ok "found .deb: $DEB"
 check "dpkg-deb --info parses the package" dpkg-deb --info "$DEB"
 check "package name is yacreader" bash -c "[ \"\$(dpkg-deb -f '$DEB' Package)\" = 'yacreader' ]"
 PKG_VERSION="$(dpkg-deb -f "$DEB" Version)"
-check "upstream version in $PKG_VERSION matches VERSION ($VERSION)" bash -c "[ \"\${PKG_VERSION%%-*}\" = '$VERSION' ]"
+check "upstream version in $PKG_VERSION matches VERSION ($VERSION)" bash -c "[ \"\$(dpkg-deb -f '$DEB' Version | sed 's/-.*//')\" = '$VERSION' ]"
 
 # ---------------------------------------------------------------------------
 # 2. Install
@@ -102,7 +106,6 @@ check "dpkg reports yacreader as installed" bash -c "dpkg -s yacreader | grep -q
 # 3. Files present
 # ---------------------------------------------------------------------------
 echo "[3/6] Files present"
-LIBDIR="/usr/lib/x86_64-linux-gnu"
 check "/usr/bin/YACReader exists" test -x /usr/bin/YACReader
 check "/usr/bin/YACReaderLibrary exists" test -x /usr/bin/YACReaderLibrary
 check "/usr/bin/YACReaderLibraryServer exists" test -x /usr/bin/YACReaderLibraryServer
@@ -110,10 +113,15 @@ check "desktop file YACReader.desktop installed" test -f /usr/share/applications
 check "desktop file YACReaderLibrary.desktop installed" test -f /usr/share/applications/YACReaderLibrary.desktop
 check "icon YACReader.svg installed" test -f /usr/share/icons/hicolor/scalable/apps/YACReader.svg
 check "icon YACReaderLibrary.svg installed" test -f /usr/share/icons/hicolor/scalable/apps/YACReaderLibrary.svg
-check "man page YACReader(1) installed" test -f /usr/share/man/man1/YACReader.1.gz
-check "man page YACReaderLibrary(1) installed" test -f /usr/share/man/man1/YACReaderLibrary.1.gz
-check "server web assets installed" test -f /usr/share/yacreader/server/index.html
-check "bundled 7z.so installed (RAR5 support)" test -f "$LIBDIR/yacreader/7z.so"
+# man pages may be excluded by dpkg config (e.g. docker images), so check
+# package ownership instead of file presence
+check "man page YACReader(1) in package" bash -c "dpkg-query -L yacreader | grep -q 'man/man1/YACReader.1'"
+check "man page YACReaderLibrary(1) in package" bash -c "dpkg-query -L yacreader | grep -q 'man/man1/YACReaderLibrary.1'"
+check "server web assets installed" test -f /opt/yacreader/share/yacreader/server/docroot/css/webui.css
+check "bundled 7z.so installed (RAR5 support)" test -f /opt/yacreader/lib/yacreader/7z.so
+check "bundled Qt libs present (self-contained Qt 6.9)" test -f /opt/yacreader/lib/libQt6Core.so.6
+check "qt.conf present next to binaries" test -f /opt/yacreader/bin/qt.conf
+check "systemd user unit installed" test -f /usr/lib/systemd/user/yacreaderlibraryserver.service
 
 # ---------------------------------------------------------------------------
 # 4. Headless runs without crashing
@@ -193,9 +201,9 @@ else
     fail "apt-get remove failed"
 fi
 check "dpkg no longer reports yacreader as installed" bash -c "! dpkg -s yacreader 2>/dev/null | grep -q 'Status: install ok installed'"
-check "/usr/bin/YACReader removed" bash "! -x /usr/bin/YACReader"
-check "/usr/bin/YACReaderLibrary removed" bash "! -x /usr/bin/YACReaderLibrary"
-check "/usr/bin/YACReaderLibraryServer removed" bash "! -x /usr/bin/YACReaderLibraryServer"
+check "/usr/bin/YACReader removed" bash -c "! test -x /usr/bin/YACReader"
+check "/usr/bin/YACReaderLibrary removed" bash -c "! test -x /usr/bin/YACReaderLibrary"
+check "/usr/bin/YACReaderLibraryServer removed" bash -c "! test -x /usr/bin/YACReaderLibraryServer"
 
 # cleanup
 rm -rf "$WORK" "$ISOLATED_HOME"

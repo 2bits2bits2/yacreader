@@ -45,6 +45,10 @@ CMakeLists.txt.user*
 
 # CMake
 build*/
+
+# deb packaging artifacts
+build_scripts/ubuntu_24.04/dist/
+build_scripts/ubuntu_24.04/yacreader_build/
 CMakeCache.txt
 CMakeFiles/
 cmake_install.cmake
