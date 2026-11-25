@@ -45,15 +45,17 @@ die() { echo "ERROR: $*" >&2; exit 1; }
 # ---------------------------------------------------------------------------
 command -v cmake >/dev/null || die "cmake missing"
 command -v g++ >/dev/null || die "g++ missing (apt install build-essential)"
-command -v uv >/dev/null || die "uv missing (needed to fetch Qt via aqtinstall)"
 
 AQT="uvx --from aqtinstall aqt"
 
 # ---------------------------------------------------------------------------
 # 1. Qt 6.9 official binaries (cached between runs)
+#    CI can override QT_DIR: jurplel/install-qt-action installs to
+#    <dir>/Qt/<version>/<arch>
 # ---------------------------------------------------------------------------
-QT_DIR="$BUILD_DIR/qt/$QT_VERSION/gcc_64"
-if [ ! -f "$QT_DIR/bin/linguist_lrelease" ] && [ ! -f "$QT_DIR/lib/cmake/Qt6/Qt6Config.cmake" ]; then
+QT_DIR="${QT_DIR:-$BUILD_DIR/qt/$QT_VERSION/gcc_64}"
+if [ ! -f "$QT_DIR/lib/cmake/Qt6/Qt6Config.cmake" ]; then
+    command -v uv >/dev/null || die "uv missing (needed to fetch Qt via aqtinstall) or set QT_DIR to an existing Qt install"
     log "Downloading Qt $QT_VERSION (official binaries via aqtinstall)..."
     mkdir -p "$BUILD_DIR/qt"
     $AQT install-qt linux desktop "$QT_VERSION" linux_gcc_64 \

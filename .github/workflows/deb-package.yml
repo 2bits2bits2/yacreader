@@ -31,6 +31,8 @@ jobs:
     timeout-minutes: 90
     env:
       BUILD_NUMBER: ${{ github.run_number }}
+      # install-qt-action installs to <dir>/Qt/<version>/<arch>
+      QT_DIR: ${{ github.workspace }}/build_scripts/ubuntu_24.04/yacreader_build/qt/Qt/6.9.3/gcc_64
     steps:
       - uses: actions/checkout@v6
 
