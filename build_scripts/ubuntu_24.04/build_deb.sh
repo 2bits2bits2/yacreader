@@ -109,13 +109,48 @@ cmake --build "$BUILD_DIR/build" --parallel "$(nproc)"
 # ---------------------------------------------------------------------------
 # 4. Sanity: unit tests (offscreen)
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# 4. Sanity: pre-flight dependency resolution + unit tests (offscreen)
+# ---------------------------------------------------------------------------
+# The dynamic loader only reports the FIRST unresolved library per binary,
+# so a failing test run would reveal missing libs one CI cycle at a time.
+# This pre-flight collects the complete list of unresolved libraries across
+# every test binary before ctest starts, with the exact search path ctest
+# will use.
+log "Pre-flight: resolving dependencies of all test binaries (complete report)..."
+TEST_LIB_PATH="$QT_DIR/lib:$SYSROOT/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+declare -A MISSING=()
+declare -A NEEDERS=()
+while IFS= read -r -d '' f; do
+    unresolved="$(LD_LIBRARY_PATH="$TEST_LIB_PATH" ldd "$f" 2>/dev/null | awk '/=> not found/ {print $1}')"
+    [ -z "$unresolved" ] && continue
+    rel="${f#"$BUILD_DIR/build/"}"
+    while IFS= read -r soname; do
+        [ -z "$soname" ] && continue
+        MISSING["$soname"]=1
+        NEEDERS["$soname"]+="$rel "
+    done < <(printf '%s\n' "$unresolved" | sort -u)
+done < <(find "$BUILD_DIR/build/tests" -type f -perm -u+x -print0)
+
+if [ "${#MISSING[@]}" -gt 0 ]; then
+    echo "" >&2
+    echo "PRE-FLIGHT FAILED - unresolved shared libraries (COMPLETE list, not just the first one):" >&2
+    for soname in "${!MISSING[@]}"; do
+        echo "  - $soname" >&2
+        echo "      needed by: ${NEEDERS[$soname]}" >&2
+    done
+    echo "Fix: add the corresponding runtime + dev packages to the sysroot step in this script." >&2
+    die "${#MISSING[@]} distinct unresolved libraries; see the complete list above"
+fi
+log "Pre-flight OK: every test binary resolves its libraries"
+
 log "Running unit tests (offscreen)..."
 # LD_LIBRARY_PATH is needed because DT_RUNPATH is not transitive: system poppler
 # pulls in Qt transitively, and without it the loader would mix system Qt 6.4
 # libs with the bundled Qt 6.9. The sysroot lib dir covers machines without
 # poppler installed (the tests link against libpoppler from the sysroot).
 QT_QPA_PLATFORM=offscreen \
-LD_LIBRARY_PATH="$QT_DIR/lib:$SYSROOT/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+LD_LIBRARY_PATH="$TEST_LIB_PATH" \
 QT_PLUGIN_PATH="$QT_DIR/plugins" \
 QML2_IMPORT_PATH="$QT_DIR/qml" \
 XDG_DATA_HOME="$BUILD_DIR/xdg/data" \
