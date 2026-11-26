@@ -112,9 +112,10 @@ cmake --build "$BUILD_DIR/build" --parallel "$(nproc)"
 log "Running unit tests (offscreen)..."
 # LD_LIBRARY_PATH is needed because DT_RUNPATH is not transitive: system poppler
 # pulls in Qt transitively, and without it the loader would mix system Qt 6.4
-# libs with the bundled Qt 6.9.
+# libs with the bundled Qt 6.9. The sysroot lib dir covers machines without
+# poppler installed (the tests link against libpoppler from the sysroot).
 QT_QPA_PLATFORM=offscreen \
-LD_LIBRARY_PATH="$QT_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
+LD_LIBRARY_PATH="$QT_DIR/lib:$SYSROOT/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" \
 QT_PLUGIN_PATH="$QT_DIR/plugins" \
 QML2_IMPORT_PATH="$QT_DIR/qml" \
 XDG_DATA_HOME="$BUILD_DIR/xdg/data" \
