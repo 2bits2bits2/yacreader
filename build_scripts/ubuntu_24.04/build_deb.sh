@@ -318,6 +318,7 @@ declare -A SONAME_MAP=(
 )
 
 declare -A DEPS=()
+UNRESOLVED=()
 NEEDED_LIST="$(find "$STAGE" -type f -exec sh -c '
     head -c4 "$1" | grep -q "ELF" && objdump -p "$1" 2>/dev/null | awk "/NEEDED/ {print \$2}"
 ' _ {} \; | sort -u)"
@@ -325,14 +326,31 @@ for soname in $NEEDED_LIST; do
     [ -n "${BUNDLED[$soname]:-}" ] && continue
     if [ -n "${SONAME_MAP[$soname]:-}" ]; then
         DEPS["${SONAME_MAP[$soname]}"]=1
+        continue
+    fi
+    # dpkg-query may list both a runtime and a -dev package; prefer the runtime one
+    # (guard with || true: grep exiting 1 must not trip `set -e`)
+    pkg="$(dpkg-query -S "$soname" 2>/dev/null | cut -d: -f1 | grep -v -- '-dev$' | head -n1 || true)"
+    if [ -z "$pkg" ]; then
+        pkg="$(dpkg-query -S "$soname" 2>/dev/null | head -n1 | cut -d: -f1 || true)"
+    fi
+    if [ -n "$pkg" ]; then
+        DEPS["$pkg"]=1
     else
-        # dpkg-query may list both a runtime and a -dev package; prefer the runtime one
-        pkg="$(dpkg-query -S "$soname" 2>/dev/null | cut -d: -f1 | grep -v -- '-dev$' | head -n1)"
-        [ -z "$pkg" ] && pkg="$(dpkg-query -S "$soname" 2>/dev/null | head -n1 | cut -d: -f1)"
-        [ -n "$pkg" ] && DEPS["$pkg"]=1
-        [ -n "$pkg" ] || die "cannot map needed library '$soname' to a package - add it to SONAME_MAP in build_deb.sh"
+        UNRESOLVED+=("$soname")
     fi
 done
+
+if [ "${#UNRESOLVED[@]}" -gt 0 ]; then
+    echo "" >&2
+    echo "DEPENDENCY MAPPING FAILED - unmapped shared libraries (COMPLETE list, not just the first one):" >&2
+    for soname in "${UNRESOLVED[@]}"; do
+        echo "  - $soname" >&2
+    done
+    echo "Fix: either install the owning package on the build machine, or add entries to" >&2
+    echo "     SONAME_MAP in build_deb.sh (soname -> distro package name)." >&2
+    die "${#UNRESOLVED[@]} unmapped libraries; see the complete list above"
+fi
 
 DEPENDS="$(printf '%s\n' "${!DEPS[@]}" | sort -u | paste -sd, -)"
 log "Depends: $DEPENDS"
