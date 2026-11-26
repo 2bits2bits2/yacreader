@@ -308,13 +308,42 @@ while IFS= read -r f; do
     BUNDLED["$(basename "$f")"]=1
 done < <(find "$STAGE$YACREADER_PREFIX/lib" "$STAGE$YACREADER_PREFIX/plugins" -type f)
 
-# fallback map for sonames not installed on this host
+# soname -> distro package (noble). Baked in so Depends computation does not
+# depend on what happens to be installed on the build machine (runners have
+# far less than a desktop install). dpkg-query is only a fallback.
 declare -A SONAME_MAP=(
+    [ld-linux-x86-64.so.2]=libc6 [libc.so.6]=libc6 [libm.so.6]=libc6
+    [libdl.so.2]=libc6 [libpthread.so.0]=libc6 [librt.so.1]=libc6
+    [libresolv.so.2]=libc6
+    [libstdc++.so.6]=libstdc++6 [libgcc_s.so.1]=libgcc-s1
+    [libz.so.1]=zlib1g [libzstd.so.1]=libzstd1
+    [libatk-1.0.so.0]=libatk1.0-0t64 [libcairo.so.2]=libcairo2
+    [libcairo-gobject.so.2]=libcairo-gobject2 [libcups.so.2]=libcups2t64
+    [libdbus-1.so.3]=libdbus-1-3 [libEGL.so.1]=libegl1
+    [libfontconfig.so.1]=libfontconfig1 [libfreetype.so.6]=libfreetype6
+    [libgdk-3.so.0]=libgtk-3-0t64 [libgtk-3.so.0]=libgtk-3-0t64
+    [libgdk_pixbuf-2.0.so.0]=libgdk-pixbuf-2.0-0
+    [libgio-2.0.so.0]=libglib2.0-0t64 [libglib-2.0.so.0]=libglib2.0-0t64
+    [libgobject-2.0.so.0]=libglib2.0-0t64 [libgthread-2.0.so.0]=libglib2.0-0t64
+    [libGL.so.1]=libgl1 [libGLX.so.0]=libglx0 [libOpenGL.so.0]=libopengl0
+    [libgssapi_krb5.so.2]=libgssapi-krb5-2
+    [libpango-1.0.so.0]=libpango-1.0-0 [libpangocairo-1.0.so.0]=libpangocairo-1.0-0
+    [libpoppler-qt6.so.3]=libpoppler-qt6-3t64 [libpulse.so.0]=libpulse0
+    [libspeechd.so.2]=libspeechd2
     [libavcodec.so.60]=libavcodec60 [libavformat.so.60]=libavformat60
     [libavutil.so.58]=libavutil58 [libswresample.so.4]=libswresample4
     [libswscale.so.7]=libswscale7 [libavtp.so.0]=libavtp0
-    [libspeechd.so.2]=libspeechd2 [libxkbcommon.so.0]=libxkbcommon0
-    [libxkbcommon-x11.so.0]=libxkbcommon-x11-0
+    [libwayland-client.so.0]=libwayland-client0 [libwayland-cursor.so.0]=libwayland-cursor0
+    [libX11.so.6]=libx11-6 [libX11-xcb.so.1]=libx11-xcb1
+    [libxcb.so.1]=libxcb1 [libxcb-cursor.so.0]=libxcb-cursor0
+    [libxcb-glx.so.0]=libxcb-glx0 [libxcb-icccm.so.4]=libxcb-icccm4
+    [libxcb-image.so.0]=libxcb-image0 [libxcb-keysyms.so.1]=libxcb-keysyms1
+    [libxcb-randr.so.0]=libxcb-randr0 [libxcb-render.so.0]=libxcb-render0
+    [libxcb-render-util.so.0]=libxcb-render-util0 [libxcb-shape.so.0]=libxcb-shape0
+    [libxcb-shm.so.0]=libxcb-shm0 [libxcb-sync.so.1]=libxcb-sync1
+    [libxcb-util.so.1]=libxcb-util1 [libxcb-xfixes.so.0]=libxcb-xfixes0
+    [libxcb-xkb.so.1]=libxcb-xkb1
+    [libxkbcommon.so.0]=libxkbcommon0 [libxkbcommon-x11.so.0]=libxkbcommon-x11-0
 )
 
 declare -A DEPS=()
